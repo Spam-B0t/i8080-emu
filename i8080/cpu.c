@@ -32,7 +32,8 @@ void emulate8080(cpu8080 *cpu){
     switch(*opcode){
         case 0x00: break;
         case 0x01: cpu->c=opcode[1]; cpu->b=opcode[2]; cpu->pc+=2; break;
-        //case 0x02: break;
+        case 0x02: {uint16_t adr=(cpu->b<<8) | (cpu->c);
+                    cpu->memory[adr]=cpu->a;} break;
         //case 0x03: break;
         case 0x04: cpu->b=setZspac(cpu, (cpu->b+1)); break;
         case 0x05: cpu->b=setZspac(cpu, (cpu->b-1)); break;
@@ -42,7 +43,8 @@ void emulate8080(cpu8080 *cpu){
                     cpu->cy = (1 == (ans&(1<<7)));} break;
         case 0x08: break;
         //case 0x09: break;
-        //case 0x0a: break;
+        case 0x0a: {uint16_t adr=(cpu->b<<8) | (cpu->c);
+                    cpu->a=cpu->memory[adr];} break;
         //case 0x0b: break;
         case 0x0c: cpu->c=setZspac(cpu, (cpu->c+1)); break;
         case 0x0d: cpu->c=setZspac(cpu, (cpu->c-1)); break;
@@ -52,7 +54,8 @@ void emulate8080(cpu8080 *cpu){
                     cpu->cy = (1 == (ans&1));} break;
         case 0x10: break;
         case 0x11: cpu->e=opcode[1]; cpu->d=opcode[2]; cpu->pc+=2; break;
-        //case 0x12: break;
+        case 0x12: {uint16_t adr=(cpu->d<<8) | (cpu->e);
+                    cpu->memory[adr]=cpu->a;} break;
         //case 0x13: break;
         case 0x14: cpu->d=setZspac(cpu, (cpu->d+1)); break;
         case 0x15: cpu->d=setZspac(cpu, (cpu->d-1)); break;
@@ -62,7 +65,8 @@ void emulate8080(cpu8080 *cpu){
                     cpu->cy = (1 == (ans&(1<<7)));} break;
         case 0x18: break;
         //case 0x19: break;
-        //case 0x1a: break;
+        case 0x1a: {uint16_t adr=(cpu->d<<8) | (cpu->e);
+                    cpu->a=cpu->memory[adr];} break;
         //case 0x1b: break;
         case 0x1c: cpu->e=setZspac(cpu, (cpu->e+1)); break;
         case 0x1d: cpu->e=setZspac(cpu, (cpu->e-1)); break;
@@ -287,6 +291,9 @@ void emulate8080(cpu8080 *cpu){
         case 0xbf: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->a;
                    cpu->a=setFlags(cpu, ans); break;}
         //case 0xc0: break;
+        case 0xc1: {cpu->c=cpu->memory[cpu->sp];
+                    cpu->b=cpu->memory[cpu->sp+1];
+                    cpu->sp+=2;} break;
         
     }
     cpu->pc+=1;
