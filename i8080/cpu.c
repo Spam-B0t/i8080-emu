@@ -335,7 +335,13 @@ void emulate8080(cpu8080 *cpu){
         case 0xc1: {cpu->c=cpu->memory[cpu->sp];
                     cpu->b=cpu->memory[cpu->sp+1];
                     cpu->sp+=2;} break;
-        
+        case 0xc2: if(cpu->z==0)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
+        case 0xc3: cpu->pc=(opcode[2] << 8) | opcode[1]; break;
+        //case 0xc4: break;
+        //case 0xc5: break;
+        case 0xc6: {uint16_t ans=(uint16_t)cpu->a+(uint16_t)opcode[1];
+                    cpu->a=setFlags(cpu, ans);} break;
     }
     cpu->pc+=1;
 }
