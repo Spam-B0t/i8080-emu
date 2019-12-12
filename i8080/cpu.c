@@ -76,7 +76,9 @@ void emulate8080(cpu8080 *cpu){
                     cpu->cy = (1 == (ans&1));} break;
         case 0x20: break;
         case 0x21: cpu->l=opcode[1]; cpu->h=opcode[2]; cpu->pc+=2; break;
-        //case 0x22: break;
+        case 0x22: {uint16_t adr=(opcode[2] << 8) | opcode[1];
+                    cpu->memory[adr]=cpu->l; cpu->memory[adr+1]=cpu->h;
+                    cpu->pc+=2;} break;
         //case 0x23: break;
         case 0x24: cpu->h=setZspac(cpu, (cpu->h+1)); break;
         case 0x25: cpu->h=setZspac(cpu, (cpu->h-1)); break;
@@ -84,7 +86,9 @@ void emulate8080(cpu8080 *cpu){
         //case 0x27: break;
         case 0x28: break;
         //case 0x29: break;
-        //case 0x2a: break;
+        case 0x2a: {uint16_t adr=(opcode[2] << 8) | opcode[1];
+                    cpu->l=cpu->memory[adr]; cpu->h=cpu->memory[adr+1];
+                    cpu->pc+=2;} break;
         //case 0x2b: break;
         case 0x2c: cpu->l=setZspac(cpu, (cpu->l+1)); break;
         case 0x2d: cpu->l=setZspac(cpu, (cpu->l-1)); break;
@@ -92,8 +96,9 @@ void emulate8080(cpu8080 *cpu){
         case 0x2f: cpu->a=~cpu->a; break;
         case 0x30: break;
         //case 0x31: break;
-        //case 0x32: break;
-        //case 0x33: break;
+        case 0x32: {uint16_t adr=(opcode[2] << 8) | opcode[1];
+                   cpu->memory[adr]=cpu->a; cpu->pc+=2;} break;
+        case 0x33: cpu->sp++; break;
         //case 0x34: break;
         //case 0x35: break;
         //case 0x36: break;
