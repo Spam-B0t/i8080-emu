@@ -11,7 +11,7 @@ typedef struct cpu8080{
 uint8_t setZspac(cpu8080 *cpu, uint16_t ans){
     cpu->z=((ans & 0xff) == 0);
     cpu->s=((ans & 0x80) != 0); 
-    cpu->p=(ans % 2 != 1);
+    cpu->p=(ans % 2 == 0);
     //cpu->ac=
     return ans & 0xff;
 }
@@ -347,7 +347,8 @@ void emulate8080(cpu8080 *cpu){
         //case 0xc7: break;
         //case 0xc8: break;
         //case 0xc9: break;
-        //case 0xca: break;
+        case 0xca: if(cpu->z==1)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
         //case 0xcb: break;
         //case 0xcc: break;
         //case 0xcd: break;
@@ -358,7 +359,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xd1: {cpu->e=cpu->memory[cpu->sp];
                     cpu->d=cpu->memory[cpu->sp+1];
                     cpu->sp+=2;} break;
-        //case 0xd2: break;
+        case 0xd2: if(cpu->cy==0)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
         //case 0xd3: break;
         //case 0xd4: break;
         case 0xd5: {cpu->memory[cpu->sp-2]=cpu->e;
@@ -369,7 +371,8 @@ void emulate8080(cpu8080 *cpu){
         //case 0xd7: break;
         //case 0xd8: break;
         //case 0xd9: break;
-        //case 0xda: break;
+        case 0xda: if(cpu->cy!=0)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
         //case 0xdb: break;
         //case 0xdc: break;
         //case 0xdd: break;
@@ -380,7 +383,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xe1: {cpu->l=cpu->memory[cpu->sp];
                     cpu->h=cpu->memory[cpu->sp+1];
                     cpu->sp+=2;} break;
-        //case 0xe2: break;
+        case 0xe2: if(cpu->p!=0)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
         case 0xe3: {uint8_t x=cpu->memory[cpu->sp];
                       cpu->memory[cpu->sp]=cpu->l;
                       cpu->l=x;
@@ -396,7 +400,8 @@ void emulate8080(cpu8080 *cpu){
         //case 0xe7: break;
         //case 0xe8: break;
         //case 0xe9: break;
-        //case 0xea: break;
+        case 0xea: if(cpu->p==0)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
         //case 0xeb: break;
         //case 0xec: break;
         //case 0xed: break;
@@ -412,7 +417,8 @@ void emulate8080(cpu8080 *cpu){
                     cpu->cy = (0x08 == (psw & 0x08));
                     cpu->ac = (0x10 == (psw & 0x10));
                     cpu->sp += 2;} break;
-        //case 0xf2: break;
+        case 0xf2: if(cpu->s==1)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
         //case 0xf3: break;
         //case 0xf4: break;
         case 0xf5: {cpu->memory[cpu->sp-1] = cpu->a;
@@ -423,8 +429,10 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
         //case 0xf7: break;
         //case 0xf8: break;
-        //case 0xf9: break;
-        //case 0xfa: break;
+        case 0xf9: {uint16_t hl=(cpu->h<<8) | (cpu->l);
+                      cpu->sp=hl;} break;
+        case 0xfa: if(cpu->s==0)cpu->pc=(opcode[2] << 8) | opcode[1]; 
+                      else cpu->pc+=2; break;
         //case 0xfb: break;
         //case 0xfc: break;
         //case 0xfd: break;
