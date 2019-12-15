@@ -1,4 +1,5 @@
 #include<stdio.h>
+#include "disassembler.h"
 
 #define RET cpu->pc=(cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]; cpu->sp+=2;
 #define CALL(adr) uint16_t ret = cpu->pc+2;cpu->memory[cpu->sp-1]=(ret >> 8) & 0xff;cpu->memory[cpu->sp-2]=(ret & 0xff);cpu->sp-=2;cpu->pc=(adr);
@@ -356,7 +357,7 @@ void emulate8080(cpu8080 *cpu){
                     cpu->sp+=2;} break;
         case 0xc2: if(cpu->z==0)cpu->pc=(opcode[2] << 8) | opcode[1]; 
                    else cpu->pc+=2; break;
-        case 0xc3: cpu->pc=(opcode[2] << 8) | opcode[1]; break;
+        case 0xc3: cpu->pc=((opcode[2] << 8) | opcode[1])-1; break;
         case 0xc4: if(cpu->z==0){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xc5: {cpu->memory[cpu->sp-2]=cpu->c;
                     cpu->memory[cpu->sp-1]=cpu->b;
@@ -478,6 +479,22 @@ int main() {
         //unsigned char *data=malloc(fsize);
         fread(data, sizeof(data), 1, f);
         fclose(f);
+        cpu8080 i8080; i8080.memory=&data[0];
+        i8080.a=0;i8080.b=0;i8080.c=0;i8080.d=0;i8080.e=0;
+        i8080.h=0;i8080.l=0;i8080.pc=0;i8080.sp=0;
+        i8080.z=0;i8080.s=0;i8080.p=0;i8080.cy=0;
+        while(pc<fsize){
+            disassemble8080(&data[0], i8080.pc);
+            printf("%02x\n", i8080.memory[i8080.pc]);
+            emulate8080(&i8080);
+            printf("af=%02x bc=%02x%02x de=%02x%02x ",
+              i8080.a,/*i8080.f,*/i8080.b,i8080.c,i8080.d,i8080.e);
+            printf("hl=%02x%02x pc=%04x sp=%04x \n",
+              i8080.h,i8080.l,i8080.pc,i8080.sp);
+            printf("z=%d s=%d p=%d cy=%d \n",
+              i8080.z,i8080.s,i8080.p,i8080.cy);
+            getchar();
+        }
     }
     else printf("OOPS! SOMETHING WENT WRONG");
 }
