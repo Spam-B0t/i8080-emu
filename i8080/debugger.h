@@ -1,4 +1,4 @@
-#include "cpu.c"
+#include "cpu.h"
 #include "disassembler.h"
 
 
