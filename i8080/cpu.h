@@ -1,8 +1,9 @@
 #include<stdio.h>
-#include<stdlib.h>//used for malloc()
-#include "disassembler.h"
+#include<stdlib.h>//necessary for malloc()
+//#include "disassembler.h"
+//#include "debugger.h"
 
-#define RET cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp])-1; cpu->sp+=2;
+#define RET cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]); cpu->sp+=2;
 #define CALL(adr) uint16_t ret = cpu->pc+2;cpu->memory[cpu->sp-1]=(ret >> 8) & 0xff;cpu->memory[cpu->sp-2]=(ret & 0xff);cpu->sp-=2;cpu->pc=(adr)-1;
 #define JMP cpu->pc=((opcode[2] << 8) | opcode[1])-1
 
@@ -18,7 +19,7 @@ void reset(cpu8080 *cpu){
     cpu->memory=malloc(0x10000); 
     cpu->a=0; cpu->b=0; cpu->c=0;
     cpu->d=0; cpu->e=0; cpu->h=0;
-    cpu->l=0; cpu->pc=0; cpu->sp=0xf000;
+    cpu->l=0; cpu->pc=0; cpu->sp=0x0;//0xf000;
     cpu->z=0; cpu->s=0; cpu->p=0; cpu->cy=0;
 }
 
@@ -36,8 +37,11 @@ void load(cpu8080 *cpu, char* fname, uint32_t adr){
 
 uint8_t setZspac(cpu8080 *cpu, uint16_t ans){
     cpu->z=((ans & 0xff) == 0);
-    cpu->s=((ans & 0x80) != 0); 
-    cpu->p=(ans % 2 == 0);
+    cpu->s=((ans & 0x80) != 0);
+    //parity flag
+    int i, t=0;
+    for(i=0; i<8; i++)if((ans>>i) & 1!=0)t++;
+    cpu->p=(t%2==0);
     //cpu->ac=
     return ans & 0xff;
 }
@@ -71,7 +75,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x08: break;
         case 0x09: {uint16_t hl=(cpu->h<<8) | (cpu->l);
                     uint16_t bc=(cpu->b<<8) | (cpu->c);
-                    hl+=bc; setCy(cpu, hl);
+                    hl+=bc; cpu->cy=((hl & 0xffff0000) != 0);
                     cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x0a: {uint16_t adr=(cpu->b<<8) | (cpu->c);
                     cpu->a=cpu->memory[adr];} break;
@@ -98,7 +102,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x18: break;
         case 0x19: {uint16_t hl=(cpu->h<<8) | (cpu->l);
                     uint16_t de=(cpu->d<<8) | (cpu->e); 
-                    hl+=de; setCy(cpu, hl);
+                    hl+=de; cpu->cy=((hl & 0xffff0000) != 0);
                     cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x1a: {uint16_t adr=(cpu->d<<8) | (cpu->e);
                     cpu->a=cpu->memory[adr];} break;
@@ -123,7 +127,7 @@ void emulate8080(cpu8080 *cpu){
         //case 0x27: break; spec
         case 0x28: break;
         case 0x29: {uint16_t hl=(cpu->h<<8) | (cpu->l);
-                    hl+=hl; setCy(cpu, hl);
+                    hl+=hl; cpu->cy=((hl & 0xffff0000) != 0);
                     cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x2a: {uint16_t adr=(opcode[2] << 8) | opcode[1];
                     cpu->l=cpu->memory[adr]; cpu->h=cpu->memory[adr+1];
@@ -150,7 +154,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x37: cpu->cy=1; break;
         case 0x38: break;
         case 0x39: {uint16_t hl=(cpu->h<<8) | (cpu->l);
-                    hl+=cpu->sp; setCy(cpu, hl);
+                    hl+=cpu->sp; cpu->cy=((hl & 0xffff0000) != 0);
                     cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x3a: {uint16_t adr=(opcode[2] << 8) | opcode[1];
                    cpu->a=cpu->memory[adr]; cpu->pc+=2;} break;
@@ -388,7 +392,7 @@ void emulate8080(cpu8080 *cpu){
                     cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
         case 0xc7: {CALL((uint16_t)0)} break;
         case 0xc8: if(cpu->z==1){RET} break;
-        case 0xc9: {cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp])-1;
+        case 0xc9: {cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]);
                     cpu->sp+=2;} break;//RET
         case 0xca: if(cpu->z==1)JMP; 
                    else cpu->pc+=2; break;
@@ -408,7 +412,7 @@ void emulate8080(cpu8080 *cpu){
                     cpu->sp+=2;} break;
         case 0xd2: if(cpu->cy==0)JMP; 
                       else cpu->pc+=2; break;
-        //case 0xd3: break; spec
+        case 0xd3: cpu->pc++; break; //spec
         case 0xd4: if(cpu->cy==0){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xd5: {cpu->memory[cpu->sp-2]=cpu->e;
                     cpu->memory[cpu->sp-1]=cpu->d;
@@ -491,22 +495,12 @@ void emulate8080(cpu8080 *cpu){
 }
 
 
-int main() {
+/*int main() {//j 1500
     cpu8080 i8080;
     reset(&i8080);
     load(&i8080, "invaders.h", 0);
     load(&i8080, "invaders.g", 0x800);
     load(&i8080, "invaders.f", 0x1000);
     load(&i8080, "invaders.e", 0x1800);
-    while(1==1){
-        disassemble8080(i8080.memory, i8080.pc);
-        emulate8080(&i8080);
-        printf("a=%02x bc=%02x%02x de=%02x%02x ",
-          i8080.a,i8080.b,i8080.c,i8080.d,i8080.e);
-        printf("hl=%02x%02x pc=%04x sp=%04x \n",
-          i8080.h,i8080.l,i8080.pc,i8080.sp);
-        printf("z=%d s=%d p=%d cy=%d \n",
-          i8080.z,i8080.s,i8080.p,i8080.cy);
-        getchar();
-    }
-}
+    debug(&i8080);
+}*/
