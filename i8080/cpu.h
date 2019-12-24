@@ -9,6 +9,7 @@
 
 typedef struct cpu8080{
     uint8_t *memory;
+    uint8_t interrupts:1;//not the actual part of the cpu
     uint8_t a, b, c, d, e, h, l; //registers (a - accumulator)
     uint16_t sp, pc;//stack pointer, program counter
     uint8_t z:1, s:1, p:1, cy:1, ac:1;//flags: zero,sign,parity,
@@ -471,7 +472,7 @@ void emulate8080(cpu8080 *cpu){
                     cpu->sp += 2;} break;
         case 0xf2: if(cpu->s==0)JMP; 
                       else cpu->pc+=2; break;
-        //case 0xf3: break; spec
+        case 0xf3: cpu->interrupts=0; break;
         case 0xf4: if(cpu->s==0){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xf5: {cpu->memory[cpu->sp-1] = cpu->a;
                     uint8_t psw=(cpu->z | cpu->s<<1 | cpu->p<<2 | cpu->cy<<3 | cpu->ac<<4);
@@ -484,7 +485,7 @@ void emulate8080(cpu8080 *cpu){
         case 0xf9: cpu->sp=(cpu->h<<8) | (cpu->l); break;
         case 0xfa: if(cpu->s==1)JMP; 
                       else cpu->pc+=2; break;
-        //case 0xfb: break; spec
+        case 0xfb: cpu->interrupts=1; break;
         case 0xfc: if(cpu->s==1){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xfd: break;
         case 0xfe: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)opcode[1];
