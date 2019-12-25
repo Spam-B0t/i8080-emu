@@ -18,7 +18,7 @@ typedef struct InvadersMachine{
     uint8_t shift_offset;
 }InvadersMachine;
 
-void draw(InvadersMachine *arcade, SDL_Renderer *renderer/*, uint8_t *buf, int h, int w*/){
+void draw(InvadersMachine *arcade, SDL_Renderer *renderer){
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     int i=0x2400, j, rx=0, ry=0; 
@@ -31,27 +31,25 @@ void draw(InvadersMachine *arcade, SDL_Renderer *renderer/*, uint8_t *buf, int h
             
             for(p=0; p<8; p++){
                 SDL_Rect r; r.x = rx; r.y = ry; r.w = 3; r.h = 3;
-                if ( 0!= (pxl & (1<<p)))
+                if ( 0!= (pxl & (1<<p))){
                     //printf("#");
                     SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
+                    SDL_RenderFillRect(renderer, &r);}
                     //arcade->screen[j][i]=1;
                     //*p1=0xFFFFFFFFL;
-                else
+                //else
                     //printf(" ");
-                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                    //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                     //arcade->screen[j][i]=0;
                     //*p1=0x00000000L;
                 //p1-=224;  //next line
                 //printf("\n");
                 rx+=3;
-                SDL_RenderFillRect(renderer, &r);
+                //SDL_RenderFillRect(renderer, &r);
                 //SDL_RenderPresent(renderer);
-            } //ry+=15;
+            }
         } ry+=3; rx=0;//printf("\n");
-    } SDL_RenderPresent(renderer); //int t;sleep(1); for(t=0;t<300;t++)printf("\n");
-    /*for(i=0; i<256; i++){for(j=0; j<224; j+=8){
-    if(arcade->screen[i][j]==1)printf("#");
-    else printf(" ");} printf("\n");}*/
+    } SDL_RenderPresent(renderer);
 }
 
 uint8_t MachineIN(InvadersMachine *arcade, uint8_t port){    
@@ -77,8 +75,6 @@ void GenerateInterrupt(cpu8080* cpu, int interrupt_num){
     cpu->memory[cpu->sp-1]=(cpu->pc >> 8) & 0xff;
     cpu->memory[cpu->sp-2]=(cpu->pc & 0xff);
     cpu->sp-=2;
-    //Set the PC to the low memory vector.
-    //This is identical to an "RST interrupt_num" instruction.
     cpu->pc = 8*interrupt_num;
     cpu->inte=0;
 }
@@ -93,7 +89,7 @@ int main (int argc, char** argv) {//printf("begin");
     arcade.vram=&i8080.memory[0x2400];
     arcade.lastInterrupt=clock();
     time_t time;
-    int t=0; //uint8_t *buf = malloc(4 * 224*256);
+    long t=0;
     //graphics s
     SDL_Window* window = NULL;
     window = SDL_CreateWindow
@@ -120,7 +116,7 @@ int main (int argc, char** argv) {//printf("begin");
         }
         time=clock();
         if(time - arcade.lastInterrupt>1.0/60.0){
-            if(t>45000)draw(&arcade, renderer/*,buf*/);
+            if(t>40000)draw(&arcade, renderer);
             if(arcade.cpu->inte==1){
                 GenerateInterrupt(&i8080, 2);
                 arcade.lastInterrupt = time;
