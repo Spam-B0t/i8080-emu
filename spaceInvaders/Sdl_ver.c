@@ -1,5 +1,5 @@
 #include<stdio.h>
-#include"cpu.c"
+#include"cpu.h"
 #include<unistd.h>//for sleep()
 #include<time.h>//for time_t, clock() and interrupts handling
 #include <SDL.h>//only in makefile, type "run" in playbtn with gears
@@ -13,6 +13,7 @@ typedef struct InvadersMachine{
     double nextInterrupt;
     int whichInterrupt;
     //NSTimer *emulatorTimer;
+    uint8_t in_port1;
     uint8_t shift0; //LSB of Space Invader's external shift hardware
     uint8_t shift1; //MSB
     uint8_t shift_offset;
@@ -56,7 +57,7 @@ uint8_t MachineIN(InvadersMachine *arcade, uint8_t port){
     uint8_t a=0;    
     switch(port){
         case 0: a=1;
-        case 1: a=0;
+        case 1: a=arcade->in_port1;
         case 3:{uint16_t v = (arcade->shift1<<8) | arcade->shift0;    
                 a = ((v >> (8-arcade->shift_offset)) & 0xff);} break;    
        }    
@@ -79,6 +80,44 @@ void GenerateInterrupt(cpu8080* cpu, int interrupt_num){
     cpu->inte=0;
 }
 
+void keyDown(InvadersMachine *arcade, SDL_Event *event){
+    int quit=0;
+    //while(quit!=1){
+        while(SDL_PollEvent(event)){
+            if(event->type==SDL_KEYDOWN){
+                switch(event->key.keysym.sym){
+                    case SDLK_c: arcade->in_port1 |= 0x1; break;//coin
+                    case SDLK_l: arcade->in_port1 |= 0x20; break;//left
+                    case SDLK_r: arcade->in_port1 |= 0x40; break;//right
+                    case SDLK_SPACE: arcade->in_port1 |= 0x10; break;//fire
+                    case SDLK_RETURN: arcade->in_port1 |= 0x04; break;//start
+                    //case SDLK_p: arcade->in_port1 |= 0x1; break;//pause
+                }
+            }
+            else if(event->type==SDL_QUIT)quit=1;
+        }
+    //}
+}
+
+void keyUp(InvadersMachine *arcade, SDL_Event *event){
+    int quit=0;
+    //while(quit!=1){
+        while(SDL_PollEvent(event)){
+            if(event->type==SDL_KEYDOWN){
+                switch(event->key.keysym.sym){
+                    case SDLK_c: arcade->in_port1 &= ~0x1; break;//coin
+                    case SDLK_l: arcade->in_port1 &= ~0x20; break;//left
+                    case SDLK_r: arcade->in_port1 &= ~0x40; break;//right
+                    case SDLK_SPACE: arcade->in_port1 &= ~0x10; break;//fire
+                    case SDLK_RETURN: arcade->in_port1 &= ~0x04; break;//start
+                    //case SDLK_p: arcade->in_port1 |= 0x1; break;//pause
+                }
+            }
+            else if(event->type==SDL_QUIT)quit=1;
+        }
+    //}
+}
+
 int main (int argc, char** argv) {//printf("begin");
     cpu8080 i8080; reset(&i8080);
     load(&i8080, "invaders.h", 0);
@@ -89,7 +128,7 @@ int main (int argc, char** argv) {//printf("begin");
     arcade.vram=&i8080.memory[0x2400];
     arcade.lastInterrupt=clock();
     time_t time;
-    long t=0;
+    long t=1;
     //graphics s
     SDL_Window* window = NULL;
     window = SDL_CreateWindow
@@ -104,7 +143,11 @@ int main (int argc, char** argv) {//printf("begin");
     renderer =  SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);//black bkgrnd
     //graphics e
-    for(;;){t++; //if(t>45000)draw(&arcade,buf);
+    //input s
+    SDL_Event event;
+    //i8080.memory[0x20c0]=0;
+    //input e
+    for(;;){//if(i8080.cycles>=16660){draw(&arcade, renderer); i8080.cycles%=16660;}
         emulate8080(&i8080);
         uint8_t *opcode = &i8080.memory[i8080.pc];
         switch(*opcode){
@@ -113,12 +156,13 @@ int main (int argc, char** argv) {//printf("begin");
             case 0xd3: {uint8_t port = opcode[1];
                        MachineOUT(&arcade, port);} break;
             default: break;
-        }
+        } //keyDown(&arcade, &event); keyUp(&arcade, &event); 
         time=clock();
-        if(time - arcade.lastInterrupt>1.0/60.0){
-            if(t>40000)draw(&arcade, renderer);
+        if(i8080.cycles>=16660){
+            draw(&arcade, renderer);
+            i8080.cycles%=16660;sleep(.7);
             if(arcade.cpu->inte==1){
-                GenerateInterrupt(&i8080, 2);
+                GenerateInterrupt(&i8080, t);
                 arcade.lastInterrupt = time;
             }
         }
