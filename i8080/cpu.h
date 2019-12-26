@@ -5,7 +5,7 @@
 
 #define RET cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]); cpu->sp+=2; cpu->cycles+=2;
 #define CALL(adr) uint16_t ret = cpu->pc+2;cpu->memory[cpu->sp-1]=(ret >> 8) & 0xff;cpu->memory[cpu->sp-2]=(ret & 0xff);cpu->sp-=2;cpu->cycles+=4;cpu->pc=(adr)-1;
-#define JMP cpu->pc=((opcode[2] << 8) | opcode[1])-1
+#define JMP cpu->pc=((opcode[2] << 8) | opcode[1])-1; cpu->cycles+=2;
 
 typedef struct cpu8080{
     int cycles; //16000
@@ -397,8 +397,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xc8: if(cpu->z==1){RET} break;
         case 0xc9: {cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]);
                     cpu->sp+=2; cpu->cycles+=2;} break;//RET
-        case 0xca: {if(cpu->z==1)JMP; 
-                   else cpu->pc+=2; cpu->cycles+=2;} break;
+        case 0xca: if(cpu->z==1){JMP}
+                   else cpu->pc+=2; break;
         case 0xcb: break;
         case 0xcc: {if(cpu->z==1){CALL((opcode[2]<<8) | opcode[1])} 
                    else cpu->cycles+=2;} break;
@@ -415,8 +415,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xd1: {cpu->e=cpu->memory[cpu->sp];
                     cpu->d=cpu->memory[cpu->sp+1];
                     cpu->sp+=2; cpu->cycles+=2;} break;
-        case 0xd2: {if(cpu->cy==0)JMP; 
-                      else cpu->pc+=2; cpu->cycles+=2;} break;
+        case 0xd2: if(cpu->cy==0){JMP}
+                   else cpu->pc+=2; break;
         case 0xd3: cpu->cycles+=2; cpu->pc++; break; //OUT
         case 0xd4: {if(cpu->cy==0){CALL((opcode[2]<<8) | opcode[1])} 
                     else cpu->cycles+=2;} break;
@@ -428,8 +428,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xd7: {CALL((uint16_t)0x10)} cpu->cycles-=2; break;
         case 0xd8: if(cpu->cy==1){RET} break;
         case 0xd9: break;
-        case 0xda: {if(cpu->cy!=0)JMP; 
-                      else cpu->pc+=2; cpu->cycles+=2;} break;
+        case 0xda: if(cpu->cy!=0){JMP}
+                   else cpu->pc+=2; break;
         case 0xdb: cpu->cycles+=2; cpu->pc++; break; //IN
         case 0xdc: {if(cpu->cy==1){CALL((opcode[2]<<8) | opcode[1])} 
                     else cpu->cycles+=2;} break;
@@ -441,8 +441,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xe1: {cpu->l=cpu->memory[cpu->sp];
                     cpu->h=cpu->memory[cpu->sp+1];
                     cpu->sp+=2; cpu->cycles+=2;} break;
-        case 0xe2: {if(cpu->p==0)JMP; 
-                      else cpu->pc+=2; cpu->cycles+=2;} break;
+        case 0xe2: if(cpu->p==0){JMP}
+                   else cpu->pc+=2; break;
         case 0xe3: {uint8_t x=cpu->memory[cpu->sp];
                       cpu->memory[cpu->sp]=cpu->l;
                       cpu->l=x;
@@ -459,8 +459,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xe7: {CALL((uint16_t)0x20)} cpu->cycles-=2; break;
         case 0xe8: if(cpu->p==1){RET} break;
         case 0xe9: cpu->pc=cpu->h<<8 | cpu->l; break;
-        case 0xea: {if(cpu->p==1)JMP; 
-                      else cpu->pc+=2; cpu->cycles+=2;} break;
+        case 0xea: if(cpu->p==1){JMP} 
+                   else cpu->pc+=2; break;
         case 0xeb: {uint8_t x=cpu->h; cpu->h=cpu->d; cpu->d=x;
                     x=cpu->l; cpu->l=cpu->e; cpu->e=x;} break;
         case 0xec: if(cpu->p==1){CALL((opcode[2]<<8) | opcode[1])} break;
@@ -477,8 +477,8 @@ void emulate8080(cpu8080 *cpu){
                     cpu->cy = (0x08 == (psw & 0x08));
                     cpu->ac = (0x10 == (psw & 0x10));
                     cpu->sp += 2; cpu->cycles+=2;} break;
-        case 0xf2: {if(cpu->s==0)JMP; 
-                      else cpu->pc+=2; cpu->cycles+=2;} break;
+        case 0xf2: if(cpu->s==0){JMP}
+                   else cpu->pc+=2; break;
         case 0xf3: cpu->inte=0; break;
         case 0xf4: {if(cpu->s==0){CALL((opcode[2]<<8) | opcode[1])} 
                     else cpu->cycles+=2;} break;
@@ -491,8 +491,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xf7: {CALL((uint16_t)0x30)} cpu->cycles-=2; break;
         case 0xf8: if(cpu->s==1){RET} break;
         case 0xf9: cpu->sp=(cpu->h<<8) | (cpu->l); break;
-        case 0xfa: {if(cpu->s==1)JMP; 
-                      else cpu->pc+=2; cpu->cycles+=2;} break;
+        case 0xfa: if(cpu->s==1){JMP}
+                   else cpu->pc+=2; break;
         case 0xfb: cpu->inte=1; break;
         case 0xfc: {if(cpu->s==1){CALL((opcode[2]<<8) | opcode[1])} 
                     else cpu->cycles+=2;} break;
