@@ -437,7 +437,8 @@ void emulate8080(cpu8080 *cpu){
         case 0xda: if(cpu->cy!=0){JMP}
                    else cpu->pc+=2; break;
         case 0xdb: cpu->pc++; break; //IN
-        case 0xdc: if(cpu->cy==1){CALL((opcode[2]<<8) | opcode[1])} break;
+        case 0xdc: if(cpu->cy==1){CALL((opcode[2]<<8) | opcode[1])}
+                   else cpu->pc+=2; break;
         case 0xdd: break;
         case 0xde: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)opcode[1]-(uint16_t)cpu->cy;
                     cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
