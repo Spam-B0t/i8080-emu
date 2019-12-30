@@ -1,15 +1,16 @@
 #include<stdio.h>
-#include<stdlib.h>
+#include<stdlib.h>//necessary for malloc
+#include "cpu_clock_cycles.h"//for cc
 //#include "disassembler.h"
 //#include "debugger.h"
 
-#define RET cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]); cpu->sp+=2; cpu->cycles+=2;
-#define CALL(adr) uint16_t ret = cpu->pc+2;cpu->memory[cpu->sp-1]=(ret >> 8) & 0xff;cpu->memory[cpu->sp-2]=(ret & 0xff);cpu->sp-=2;cpu->cycles+=4;cpu->pc=(adr)-1;
-#define JMP cpu->pc=((opcode[2] << 8) | opcode[1])-1; cpu->cycles+=2;
+#define RET cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]); cpu->sp+=2; cpu->cc+=6;
+#define CALL(adr) uint16_t ret = cpu->pc+2;cpu->memory[cpu->sp-1]=(ret >> 8) & 0xff;cpu->memory[cpu->sp-2]=(ret & 0xff);cpu->sp-=2;cpu->cc+=7;cpu->pc=(adr);
+#define JMP cpu->pc=((opcode[2] << 8) | opcode[1]); cpu->cc+=5;
 
 typedef struct cpu8080{
-    int cycles; //16000
     uint8_t *memory;
+    int cc;//clock cycles 16667
     uint8_t inte:1;//interrupt flag
     uint8_t a, b, c, d, e, h, l; //registers (a - accumulator)
     uint16_t sp, pc;//stack pointer, program counter
@@ -18,7 +19,7 @@ typedef struct cpu8080{
 } cpu8080;
 
 void reset(cpu8080 *cpu){
-    cpu->memory=malloc(0x10000); 
+    cpu->memory=malloc(0x10000); cpu->cc=0;
     cpu->a=0; cpu->b=0; cpu->c=0;
     cpu->d=0; cpu->e=0; cpu->h=0;
     cpu->l=0; cpu->pc=0; cpu->sp=0x0;//0xf000;
@@ -42,8 +43,9 @@ uint8_t setZspac(cpu8080 *cpu, uint16_t ans){
     cpu->s=((ans & 0x80) != 0);
     //parity flag
     int i, t=0;
-    for(i=0; i<8; i++)if((ans>>i) & 1!=0)t++;
+    for(i=0; i<8; i++)if(((ans>>i) & 1)!=0)t++;
     cpu->p=(t%2==0);
+    //cpu->p=(ans % 2==0);
     //cpu->ac=
     return ans & 0xff;
 }
@@ -61,16 +63,18 @@ uint8_t setFlags(cpu8080 *cpu, uint16_t ans){
 
 void emulate8080(cpu8080 *cpu){
     unsigned char *opcode = &cpu->memory[cpu->pc];
+    cpu->cc+=clock_cycles[*opcode];    
+    cpu->pc+=1;
     switch(*opcode){
-        case 0x00: break;
-        case 0x01: cpu->c=opcode[1]; cpu->b=opcode[2]; cpu->cycles+=2; cpu->pc+=2; break;
+        case 0x00: break;//NOP
+        case 0x01: cpu->c=opcode[1]; cpu->b=opcode[2]; cpu->pc+=2; break;
         case 0x02: {uint16_t adr=(cpu->b<<8) | (cpu->c);
-                    cpu->memory[adr]=cpu->a; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->a;} break;
         case 0x03: {uint16_t bc=(cpu->b<<8) | (cpu->c); bc++;
                    cpu->b=(bc>>8) & 0xff; cpu->c=bc & 0xff;} break;
         case 0x04: cpu->b=setZspac(cpu, ((uint16_t)cpu->b+1)); break;
         case 0x05: cpu->b=setZspac(cpu, ((uint16_t)cpu->b-1)); break;
-        case 0x06: cpu->b=opcode[1]; cpu->pc+=1; cpu->cycles+=1; break;
+        case 0x06: cpu->b=opcode[1]; cpu->pc+=1; break;
         case 0x07: {uint8_t ans = cpu->a;
                     cpu->a = ((ans & (1<<7)) >> 7) | (ans << 1);
                     cpu->cy = (1 == (ans&(1<<7)));} break;
@@ -78,26 +82,26 @@ void emulate8080(cpu8080 *cpu){
         case 0x09: {uint16_t hl=(cpu->h<<8) | (cpu->l);
                     uint16_t bc=(cpu->b<<8) | (cpu->c);
                     hl+=bc; cpu->cy=((hl & 0xffff0000) != 0);
-                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff; cpu->cycles+=2;} break;
+                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x0a: {uint16_t adr=(cpu->b<<8) | (cpu->c);
-                    cpu->a=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->a=cpu->memory[adr];} break;
         case 0x0b: {uint16_t bc=(cpu->b<<8) | (cpu->c); bc--;
                    cpu->b=(bc>>8) & 0xff; cpu->c=bc & 0xff;} break;
         case 0x0c: cpu->c=setZspac(cpu, ((uint16_t)cpu->c+1)); break;
         case 0x0d: cpu->c=setZspac(cpu, ((uint16_t)cpu->c-1)); break;
-        case 0x0e: cpu->c=opcode[1]; cpu->pc+=1; cpu->cycles+=1; break;
+        case 0x0e: cpu->c=opcode[1]; cpu->pc+=1; break;
         case 0x0f: {uint8_t ans = cpu->a;
                     cpu->a = ((ans & 1) << 7) | (ans >> 1);
                     cpu->cy = (1 == (ans&1));} break;
         case 0x10: break;
-        case 0x11: cpu->e=opcode[1]; cpu->d=opcode[2]; cpu->cycles+=2; cpu->pc+=2; break;
+        case 0x11: cpu->e=opcode[1]; cpu->d=opcode[2]; cpu->pc+=2; break;
         case 0x12: {uint16_t adr=(cpu->d<<8) | (cpu->e);
-                    cpu->memory[adr]=cpu->a; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->a;} break;
         case 0x13: {uint16_t de=(cpu->d<<8) | (cpu->e); de++;
                    cpu->d=(de>>8) & 0xff; cpu->e=de & 0xff;} break;
         case 0x14: cpu->d=setZspac(cpu, ((uint16_t)cpu->d+1)); break;
         case 0x15: cpu->d=setZspac(cpu, ((uint16_t)cpu->d-1)); break;
-        case 0x16: cpu->d=opcode[1]; cpu->pc+=1; cpu->cycles+=1; break;
+        case 0x16: cpu->d=opcode[1]; cpu->pc+=1; break;
         case 0x17: {uint8_t ans = cpu->a;
                     cpu->a = (cpu->cy) | (ans << 1);
                     cpu->cy = (1 == (ans&(1<<7)));} break;
@@ -105,61 +109,61 @@ void emulate8080(cpu8080 *cpu){
         case 0x19: {uint16_t hl=(cpu->h<<8) | (cpu->l);
                     uint16_t de=(cpu->d<<8) | (cpu->e); 
                     hl+=de; cpu->cy=((hl & 0xffff0000) != 0);
-                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff; cpu->cycles+=2;} break;
+                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x1a: {uint16_t adr=(cpu->d<<8) | (cpu->e);
-                    cpu->a=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->a=cpu->memory[adr];} break;
         case 0x1b: {uint16_t de=(cpu->d<<8) | (cpu->e); de--;
                    cpu->d=(de>>8) & 0xff; cpu->e=de & 0xff;} break;
         case 0x1c: cpu->e=setZspac(cpu, ((uint16_t)cpu->e+1)); break;
         case 0x1d: cpu->e=setZspac(cpu, ((uint16_t)cpu->e-1)); break;
-        case 0x1e: cpu->e=opcode[1]; cpu->pc+=1; cpu->cycles+=1; break;
+        case 0x1e: cpu->e=opcode[1]; cpu->pc+=1; break;
         case 0x1f: {uint8_t ans = cpu->a;
                     cpu->a = (((ans>>7) & 1) << 7) | (ans >> 1);
                     cpu->cy = (1 == (ans&1));} break;
         case 0x20: break;
-        case 0x21: cpu->l=opcode[1]; cpu->h=opcode[2]; cpu->cycles+=2; cpu->pc+=2; break;
+        case 0x21: cpu->l=opcode[1]; cpu->h=opcode[2]; cpu->pc+=2; break;
         case 0x22: {uint16_t adr=(opcode[2] << 8) | opcode[1];
                     cpu->memory[adr]=cpu->l; cpu->memory[adr+1]=cpu->h;
-                    cpu->pc+=2; cpu->cycles+=4;} break;
+                    cpu->pc+=2;} break;
         case 0x23: {uint16_t hl=(cpu->h<<8) | (cpu->l); hl++;
                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x24: cpu->h=setZspac(cpu, ((uint16_t)cpu->h+1)); break;
         case 0x25: cpu->h=setZspac(cpu, ((uint16_t)cpu->h-1)); break;
-        case 0x26: cpu->h=opcode[1]; cpu->cycles+=1; cpu->pc+=1; break;
+        case 0x26: cpu->h=opcode[1]; cpu->pc+=1; break;
         //case 0x27: break; spec
         case 0x28: break;
         case 0x29: {uint16_t hl=(cpu->h<<8) | (cpu->l);
                     hl+=hl; cpu->cy=((hl & 0xffff0000) != 0);
-                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff; cpu->cycles+=2;} break;
+                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x2a: {uint16_t adr=(opcode[2] << 8) | opcode[1];
                     cpu->l=cpu->memory[adr]; cpu->h=cpu->memory[adr+1];
-                    cpu->pc+=2; cpu->cycles+=4;} break;
+                    cpu->pc+=2;} break;
         case 0x2b: {uint16_t hl=(cpu->h<<8) | (cpu->l); hl--;
                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x2c: cpu->l=setZspac(cpu, ((uint16_t)cpu->l+1)); break;
         case 0x2d: cpu->l=setZspac(cpu, ((uint16_t)cpu->l-1)); break;
-        case 0x2e: cpu->l=opcode[1]; cpu->cycles+=1; cpu->pc+=1; break;
+        case 0x2e: cpu->l=opcode[1]; cpu->pc+=1; break;
         case 0x2f: cpu->a=~cpu->a; break;
         case 0x30: break;
-        case 0x31: cpu->sp=(opcode[2] << 8) | opcode[1]; cpu->cycles+=2; cpu->pc+=2; break;
+        case 0x31: cpu->sp=(opcode[2] << 8) | opcode[1]; cpu->pc+=2; break;
         case 0x32: {uint16_t adr=(opcode[2] << 8) | opcode[1];
-                   cpu->memory[adr]=cpu->a; cpu->cycles+=3; cpu->pc+=2;} break;
+                   cpu->memory[adr]=cpu->a; cpu->pc+=2;} break;
         case 0x33: cpu->sp++; break;
         case 0x34: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint16_t ans=(uint16_t)cpu->memory[adr]+1;
-                    cpu->memory[adr]=setZspac(cpu, ans); cpu->cycles+=2;} break;
+                    cpu->memory[adr]=setZspac(cpu, ans);} break;
         case 0x35: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint16_t ans=(uint16_t)cpu->memory[adr]-1;
-                    cpu->memory[adr]=setZspac(cpu, ans); cpu->cycles+=2;} break;
+                    cpu->memory[adr]=setZspac(cpu, ans);} break;
         case 0x36: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=opcode[1]; cpu->cycles+=2; cpu->pc+=1;} break;
+                    cpu->memory[adr]=opcode[1]; cpu->pc+=1;} break;
         case 0x37: cpu->cy=1; break;
         case 0x38: break;
         case 0x39: {uint16_t hl=(cpu->h<<8) | (cpu->l);
                     hl+=cpu->sp; cpu->cy=((hl & 0xffff0000) != 0);
-                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff; cpu->cycles+=2;} break;
+                    cpu->h=(hl>>8) & 0xff; cpu->l=hl & 0xff;} break;
         case 0x3a: {uint16_t adr=(opcode[2] << 8) | opcode[1];
-                   cpu->a=cpu->memory[adr]; cpu->cycles+=3; cpu->pc+=2;} break;
+                   cpu->a=cpu->memory[adr]; cpu->pc+=2;} break;
         case 0x3b: cpu->sp--; break;
         case 0x3c: cpu->a=setZspac(cpu, ((uint16_t)cpu->a+1)); break;
         case 0x3d: cpu->a=setZspac(cpu, ((uint16_t)cpu->a-1)); break;
@@ -172,7 +176,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x44: cpu->b=cpu->h; break;
         case 0x45: cpu->b=cpu->l; break;
         case 0x46: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->b=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->b=cpu->memory[adr];} break;
         case 0x47: cpu->b=cpu->a; break;
         case 0x48: cpu->c=cpu->b; break;
         case 0x49: break; //cpu->c=cpu->c; break;
@@ -181,7 +185,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x4c: cpu->c=cpu->h; break;
         case 0x4d: cpu->c=cpu->l; break;
         case 0x4e: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->c=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->c=cpu->memory[adr];} break;
         case 0x4f: cpu->c=cpu->a; break;
         case 0x50: cpu->d=cpu->b; break;
         case 0x51: cpu->d=cpu->c; break;
@@ -190,7 +194,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x54: cpu->d=cpu->h; break;
         case 0x55: cpu->d=cpu->l; break;
         case 0x56: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->d=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->d=cpu->memory[adr];} break;
         case 0x57: cpu->d=cpu->a; break;
         case 0x58: cpu->e=cpu->b; break;
         case 0x59: cpu->e=cpu->c; break;
@@ -199,7 +203,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x5c: cpu->e=cpu->h; break;
         case 0x5d: cpu->e=cpu->l; break;
         case 0x5e: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->e=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->e=cpu->memory[adr];} break;
         case 0x5f: cpu->e=cpu->a; break;
         case 0x60: cpu->h=cpu->b; break;
         case 0x61: cpu->h=cpu->c; break;
@@ -208,7 +212,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x64: break; //cpu->h=cpu->h; break;
         case 0x65: cpu->h=cpu->l; break;
         case 0x66: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->h=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->h=cpu->memory[adr];} break;
         case 0x67: cpu->h=cpu->a; break;
         case 0x68: cpu->l=cpu->b; break;
         case 0x69: cpu->l=cpu->c; break;
@@ -217,23 +221,23 @@ void emulate8080(cpu8080 *cpu){
         case 0x6c: cpu->l=cpu->h; break;
         case 0x6d: break; //cpu->l=cpu->l; break;
         case 0x6e: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->l=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->l=cpu->memory[adr];} break;
         case 0x6f: cpu->l=cpu->a; break;
         case 0x70: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=cpu->b; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->b;} break;
         case 0x71: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=cpu->c; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->c;} break;
         case 0x72: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=cpu->d; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->d;} break;
         case 0x73: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=cpu->e; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->e;} break;
         case 0x74: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=cpu->h; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->h;} break;
         case 0x75: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=cpu->l; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->l;} break;
         //case 0x76: break; HALT
         case 0x77: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->memory[adr]=cpu->a; cpu->cycles+=1;} break;
+                    cpu->memory[adr]=cpu->a;} break;
         case 0x78: cpu->a=cpu->b; break;
         case 0x79: cpu->a=cpu->c; break;
         case 0x7a: cpu->a=cpu->d; break;
@@ -241,7 +245,7 @@ void emulate8080(cpu8080 *cpu){
         case 0x7c: cpu->a=cpu->h; break;
         case 0x7d: cpu->a=cpu->l; break;
         case 0x7e: {uint16_t adr=(cpu->h<<8) | (cpu->l);
-                    cpu->a=cpu->memory[adr]; cpu->cycles+=1;} break;
+                    cpu->a=cpu->memory[adr];} break;
         case 0x7f: break; //cpu->a=cpu->a; break;
         case 0x80: {uint16_t ans=(uint16_t)cpu->a+(uint16_t)cpu->b;
                    cpu->a=setFlags(cpu, ans); break;}
@@ -257,7 +261,7 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); break;}
         case 0x86: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint16_t ans=(uint16_t)cpu->a+(uint16_t)cpu->memory[adr];
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    cpu->a=setFlags(cpu, ans);} break;
         case 0x87: {uint16_t ans=(uint16_t)cpu->a+(uint16_t)cpu->a;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0x88: {uint16_t ans=(uint16_t)cpu->a+(uint16_t)cpu->b+(uint16_t)cpu->cy;
@@ -274,7 +278,7 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); break;}
         case 0x8e: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint16_t ans=(uint16_t)cpu->a+(uint16_t)cpu->memory[adr]+(uint16_t)cpu->cy;
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    cpu->a=setFlags(cpu, ans);} break;
         case 0x8f: {uint16_t ans=(uint16_t)cpu->a+(uint16_t)cpu->a+(uint16_t)cpu->cy;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0x90: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->b;
@@ -291,7 +295,7 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); break;}
         case 0x96: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->memory[adr];
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    cpu->a=setFlags(cpu, ans);} break;
         case 0x97: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->a;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0x98: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->b-(uint16_t)cpu->cy;
@@ -308,7 +312,7 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); break;}
         case 0x9e: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->memory[adr]-(uint16_t)cpu->cy;
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    cpu->a=setFlags(cpu, ans);} break;
         case 0x9f: {uint16_t ans=-(uint16_t)cpu->cy;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xa0: {uint8_t ans=cpu->a & cpu->b;
@@ -325,7 +329,7 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xa6: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint8_t ans=cpu->a & cpu->memory[adr];
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    cpu->a=setFlags(cpu, ans);} break;
         case 0xa7: {uint8_t ans=cpu->a & cpu->a;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xa8: {uint8_t ans=cpu->a ^ cpu->b;
@@ -342,7 +346,7 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xae: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint8_t ans=cpu->a ^ cpu->memory[adr];
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    cpu->a=setFlags(cpu, ans);} break;
         case 0xaf: {uint8_t ans=cpu->a ^ cpu->a;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xb0: {uint8_t ans=cpu->a | cpu->b;
@@ -359,7 +363,7 @@ void emulate8080(cpu8080 *cpu){
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xb6: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint8_t ans=cpu->a | cpu->memory[adr];
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    cpu->a=setFlags(cpu, ans);} break;
         case 0xb7: {uint8_t ans=cpu->a | cpu->a;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xb8: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->b;
@@ -376,132 +380,130 @@ void emulate8080(cpu8080 *cpu){
                    setFlags(cpu, ans); break;}
         case 0xbe: {uint16_t adr=(cpu->h<<8) | (cpu->l);
                     uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->memory[adr];
-                    setFlags(cpu, ans); cpu->cycles+=1;} break;
+                    setFlags(cpu, ans);} break;
         case 0xbf: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)cpu->a;
                    cpu->a=setFlags(cpu, ans); break;}
         case 0xc0: if(cpu->z==0){RET} break;
         case 0xc1: {cpu->c=cpu->memory[cpu->sp];
                     cpu->b=cpu->memory[cpu->sp+1];
-                    cpu->sp+=2; cpu->cycles+=2;} break;
-        case 0xc2: if(cpu->z==0)cpu->pc=((opcode[2] << 8) | opcode[1])-1; 
+                    cpu->sp+=2;} break;
+        case 0xc2: if(cpu->z==0){JMP}
                    else cpu->pc+=2; break;
-        case 0xc3: cpu->pc=((opcode[2] << 8) | opcode[1])-1; cpu->cycles+=2; break;//JMP
-        case 0xc4: {if(cpu->z==0){CALL((opcode[2]<<8) | opcode[1])}
-                   else cpu->cycles+=2;} break;
+        case 0xc3: cpu->pc=((opcode[2] << 8) | opcode[1]); break;//JMP
+        case 0xc4: if(cpu->z==0){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xc5: {cpu->memory[cpu->sp-2]=cpu->c;
                     cpu->memory[cpu->sp-1]=cpu->b;
-                    cpu->sp-=2; cpu->cycles+=2;} break;
+                    cpu->sp-=2;} break;
         case 0xc6: {uint16_t ans=(uint16_t)cpu->a+(uint16_t)opcode[1];
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xc7: {CALL((uint16_t)0)} cpu->cycles-=2; break;
+                    cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xc7: {CALL((uint16_t)0)} break;
         case 0xc8: if(cpu->z==1){RET} break;
         case 0xc9: {cpu->pc=((cpu->memory[cpu->sp+1]<<8) | cpu->memory[cpu->sp]);
-                    cpu->sp+=2; cpu->cycles+=2;} break;//RET
+                    cpu->sp+=2;} break;//RET
         case 0xca: if(cpu->z==1){JMP}
                    else cpu->pc+=2; break;
         case 0xcb: break;
-        case 0xcc: {if(cpu->z==1){CALL((opcode[2]<<8) | opcode[1])} 
-                   else cpu->cycles+=2;} break;
+        case 0xcc: if(cpu->z==1){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xcd: {uint16_t ret = cpu->pc+2;//CALL
                     cpu->memory[cpu->sp-1] = (ret >> 8) & 0xff;
                     cpu->memory[cpu->sp-2] = (ret & 0xff);
                     cpu->sp-=2;//is &0xff necessary here?
-                    cpu->cycles+=4;
-                    cpu->pc = ((opcode[2] << 8) | opcode[1])-1;} break;
+                    cpu->pc = ((opcode[2] << 8) | opcode[1]);} break;
         case 0xce: {uint16_t ans=(uint16_t)cpu->a+(uint16_t)opcode[1]+(uint16_t)cpu->cy;
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xcf: {CALL((uint16_t)8)} cpu->cycles-=2; break;
+                    cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xcf: {CALL((uint16_t)8)} break;
         case 0xd0: if(cpu->cy==0){RET} break;
         case 0xd1: {cpu->e=cpu->memory[cpu->sp];
                     cpu->d=cpu->memory[cpu->sp+1];
-                    cpu->sp+=2; cpu->cycles+=2;} break;
+                    cpu->sp+=2;} break;
         case 0xd2: if(cpu->cy==0){JMP}
-                   else cpu->pc+=2; break;
-        case 0xd3: cpu->cycles+=2; cpu->pc++; break; //OUT
-        case 0xd4: {if(cpu->cy==0){CALL((opcode[2]<<8) | opcode[1])} 
-                    else cpu->cycles+=2;} break;
+                      else cpu->pc+=2; break;
+        case 0xd3: cpu->pc++; break; //OUT
+        case 0xd4: if(cpu->cy==0){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xd5: {cpu->memory[cpu->sp-2]=cpu->e;
                     cpu->memory[cpu->sp-1]=cpu->d;
-                    cpu->sp-=2; cpu->cycles+=2;} break;
+                    cpu->sp-=2;} break;
         case 0xd6: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)opcode[1];
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xd7: {CALL((uint16_t)0x10)} cpu->cycles-=2; break;
+                    cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xd7: {CALL((uint16_t)0x10)} break;
         case 0xd8: if(cpu->cy==1){RET} break;
         case 0xd9: break;
         case 0xda: if(cpu->cy!=0){JMP}
-                   else cpu->pc+=2; break;
-        case 0xdb: cpu->cycles+=2; cpu->pc++; break; //IN
-        case 0xdc: {if(cpu->cy==1){CALL((opcode[2]<<8) | opcode[1])} 
-                    else cpu->cycles+=2;} break;
+                      else cpu->pc+=2; break;
+        case 0xdb: cpu->pc++; break; //IN
+        case 0xdc: if(cpu->cy==1){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xdd: break;
         case 0xde: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)opcode[1]-(uint16_t)cpu->cy;
-                    cpu->a=setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xdf: {CALL((uint16_t)0x18)} cpu->cycles-=2; break;
+                    cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xdf: {CALL((uint16_t)0x18)} break;
         case 0xe0: if(cpu->p==0){RET} break;
         case 0xe1: {cpu->l=cpu->memory[cpu->sp];
                     cpu->h=cpu->memory[cpu->sp+1];
-                    cpu->sp+=2; cpu->cycles+=2;} break;
+                    cpu->sp+=2;} break;
         case 0xe2: if(cpu->p==0){JMP}
-                   else cpu->pc+=2; break;
+                      else cpu->pc+=2; break;
         case 0xe3: {uint8_t x=cpu->memory[cpu->sp];
                       cpu->memory[cpu->sp]=cpu->l;
                       cpu->l=x;
                       x=cpu->memory[cpu->sp+1];
                       cpu->memory[cpu->sp+1]=cpu->h;
-                      cpu->h=x; cpu->cycles+=4;} break;
-        case 0xe4: {if(cpu->p==0){CALL((opcode[2]<<8) | opcode[1])} 
-                    else cpu->cycles+=2;} break;
+                      cpu->h=x;} break;
+        case 0xe4: if(cpu->p==0){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xe5: {cpu->memory[cpu->sp-2]=cpu->l;
                     cpu->memory[cpu->sp-1]=cpu->h;
-                    cpu->sp-=2; cpu->cycles+=2;} break;
+                    cpu->sp-=2;} break;
         case 0xe6: {uint8_t ans=cpu->a & opcode[1];
-                   cpu->a=setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xe7: {CALL((uint16_t)0x20)} cpu->cycles-=2; break;
+                   cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xe7: {CALL((uint16_t)0x20)} break;
         case 0xe8: if(cpu->p==1){RET} break;
         case 0xe9: cpu->pc=cpu->h<<8 | cpu->l; break;
-        case 0xea: if(cpu->p==1){JMP} 
-                   else cpu->pc+=2; break;
+        case 0xea: if(cpu->p==1){JMP}
+                      else cpu->pc+=2; break;
         case 0xeb: {uint8_t x=cpu->h; cpu->h=cpu->d; cpu->d=x;
                     x=cpu->l; cpu->l=cpu->e; cpu->e=x;} break;
         case 0xec: if(cpu->p==1){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xed: break;
         case 0xee: {uint8_t ans=cpu->a ^ opcode[1];
-                   cpu->a=setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xef: {CALL((uint16_t)0x28)} cpu->cycles-=2; break;
+                   cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xef: {CALL((uint16_t)0x28)} break;
         case 0xf0: if(cpu->s==0){RET} break;
-        case 0xf1: {cpu->a = cpu->memory[cpu->sp+1];
+        case 0xf1: {cpu->a = cpu->memory[cpu->sp+1];//POP PSW
                     uint8_t psw = cpu->memory[cpu->sp];
-                    cpu->z = (0x01 == (psw & 0x01));
+                    /*cpu->z = (0x01 == (psw & 0x01));
                     cpu->s = (0x02 == (psw & 0x02));
                     cpu->p = (0x04 == (psw & 0x04));
                     cpu->cy = (0x08 == (psw & 0x08));
-                    cpu->ac = (0x10 == (psw & 0x10));
-                    cpu->sp += 2; cpu->cycles+=2;} break;
+                    cpu->ac = (0x10 == (psw & 0x10));*/
+                    cpu->cy = (1 == (psw & 0x01));//1 10 100 1000
+                    cpu->p = (1<<2 == (psw & 1<<2));
+                    cpu->ac = (1<<4 == (psw & 1<<4));
+                    cpu->z = (1<<6 == (psw & 1<<6));
+                    cpu->s = (1<<7 == (psw & 1<<7));
+                    cpu->sp += 2;} break;
         case 0xf2: if(cpu->s==0){JMP}
-                   else cpu->pc+=2; break;
+                      else cpu->pc+=2; break;
         case 0xf3: cpu->inte=0; break;
-        case 0xf4: {if(cpu->s==0){CALL((opcode[2]<<8) | opcode[1])} 
-                    else cpu->cycles+=2;} break;
-        case 0xf5: {cpu->memory[cpu->sp-1] = cpu->a;
-                    uint8_t psw=(cpu->z | cpu->s<<1 | cpu->p<<2 | cpu->cy<<3 | cpu->ac<<4);
+        case 0xf4: if(cpu->s==0){CALL((opcode[2]<<8) | opcode[1])} break;
+        case 0xf5: {cpu->memory[cpu->sp-1] = cpu->a;//PUSH PSW
+                    //uint8_t psw=(cpu->ac<<4 | cpu->cy<<3 | cpu->p<<2 | cpu->s<<1 | cpu->z);
+                    uint8_t psw=(cpu->s<<7 | cpu->z<<6 | 0<<5 | cpu->ac<<4 | 0<<3 | cpu->p<<2 | 0<<1 | cpu->cy);
+                    //uint8_t psw=(cpu->s<<3 | cpu->z<<2 | cpu->p<<1 | cpu->cy);
                     cpu->memory[cpu->sp-2] = psw;
-                    cpu->sp -= 2; cpu->cycles+=2;} break;
+                    cpu->sp -= 2;} break;
         case 0xf6: {uint8_t ans=cpu->a | opcode[1];
-                   cpu->a=setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xf7: {CALL((uint16_t)0x30)} cpu->cycles-=2; break;
+                   cpu->a=setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xf7: {CALL((uint16_t)0x30)} break;
         case 0xf8: if(cpu->s==1){RET} break;
         case 0xf9: cpu->sp=(cpu->h<<8) | (cpu->l); break;
         case 0xfa: if(cpu->s==1){JMP}
-                   else cpu->pc+=2; break;
+                      else cpu->pc+=2; break;
         case 0xfb: cpu->inte=1; break;
-        case 0xfc: {if(cpu->s==1){CALL((opcode[2]<<8) | opcode[1])} 
-                    else cpu->cycles+=2;} break;
+        case 0xfc: if(cpu->s==1){CALL((opcode[2]<<8) | opcode[1])} break;
         case 0xfd: break;
         case 0xfe: {uint16_t ans=(uint16_t)cpu->a-(uint16_t)opcode[1];
-                    setFlags(cpu, ans); cpu->cycles+=1; cpu->pc+=1;} break;
-        case 0xff: {CALL((uint16_t)0x38)} cpu->cycles-=2; break;
-    } 
-    cpu->cycles+=1; cpu->pc+=1;
+                    setFlags(cpu, ans); cpu->pc+=1;} break;
+        case 0xff: {CALL((uint16_t)0x38)} break;
+    }
 }
 
 
