@@ -12,6 +12,12 @@ typedef struct InvadersMachine{
     uint8_t shift_offset;
 }InvadersMachine;
 
+void resetIM(InvadersMachine *arcade){
+    arcade->last_interrupt=0x08;
+    arcade->in_port1=0x0; arcade->shift0=0x0; arcade->shift1=0x0;
+    arcade->shift_offset=0x0;
+}
+
 void draw(InvadersMachine *arcade, SDL_Renderer *renderer){
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -32,7 +38,7 @@ void draw(InvadersMachine *arcade, SDL_Renderer *renderer){
 }
 
 uint8_t MachineIN(InvadersMachine *arcade, uint8_t port){    
-    uint8_t a=0;    
+    uint8_t a=0x08;    
     switch(port){
         case 0: a=1; break;
         case 1: { SDL_Event event;
@@ -92,7 +98,8 @@ void processInterrupts(uint16_t last, cpu8080 *cpu){
             cpu->memory[cpu->sp-1]=(cpu->pc >> 8) & 0xff;
             cpu->memory[cpu->sp-2]=(cpu->pc & 0xff);
             cpu->sp-=2;
-            cpu->pc=last; cpu->inte=0;
+            cpu->pc=last;
+            cpu->inte=0;
         }
     }
 }
@@ -104,7 +111,7 @@ int main (int argc, char** argv) {
     load(&i8080, "invaders.f", 0x1000);
     load(&i8080, "invaders.e", 0x1800);
     InvadersMachine arcade; arcade.cpu=&i8080;
-    arcade.last_interrupt=0x08;
+    resetIM(&arcade);
     arcade.vram=&i8080.memory[0x2400];
     uint16_t last=0x10;
     //graphics s
@@ -121,12 +128,7 @@ int main (int argc, char** argv) {
     renderer =  SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);//black bkgrnd
     //graphics e
-    //input s
-    arcade.in_port1=0x0;
-    unsigned long t=0;
-    //input e
     for(;;){
-        t++;
         handleinput(&i8080, &arcade);
         emulate8080(&i8080);
         if(i8080.cc>=16667){
