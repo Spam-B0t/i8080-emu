@@ -8,11 +8,7 @@ typedef struct InvadersMachine{
     cpu8080 *cpu;
     uint8_t *vram;
     //uint8_t screen[256][224];
-    double lastTimer;
-    time_t lastInterrupt;
-    double nextInterrupt;
-    int whichInterrupt;
-    //NSTimer *emulatorTimer;
+    uint16_t last_interrupt;
     uint8_t in_port1;
     uint8_t shift0; //LSB of Space Invader's external shift hardware
     uint8_t shift1; //MSB
@@ -72,51 +68,79 @@ void MachineOUT(InvadersMachine *arcade, uint8_t port){
     }    
 }
 
-void GenerateInterrupt(cpu8080* cpu, int interrupt_num){    
-    cpu->memory[cpu->sp-1]=(cpu->pc >> 8) & 0xff;
-    cpu->memory[cpu->sp-2]=(cpu->pc & 0xff);
-    cpu->sp-=2;
-    cpu->pc = 8*interrupt_num;
-    cpu->inte=0;
+void handleinput(cpu8080 *cpu, InvadersMachine *arcade){
+        unsigned char *opcode = &cpu->memory[cpu->pc];
+        switch(*opcode){
+            case 0xdb: {uint8_t port = opcode[1];
+                       cpu->a = MachineIN(arcade, port);} break;
+            case 0xd3: {uint8_t port = opcode[1];
+                       MachineOUT(arcade, port);} break;
+            default: break;
+        }
 }
 
-void keyDown(InvadersMachine *arcade, SDL_Event *event){
-    int quit=0;
+void processInterrupts(uint16_t last, cpu8080 *cpu){
+    if(cpu->cc>=16667){
+        cpu->cc-=16667;
+        if(cpu->inte==1){
+            cpu->memory[cpu->sp-1]=(cpu->pc >> 8) & 0xff;
+            cpu->memory[cpu->sp-2]=(cpu->pc & 0xff);
+            cpu->sp-=2; //cpu->cc+=11;
+            cpu->pc=last; cpu->inte=0;
+        }
+    }
+}
+
+/*void keyDown(InvadersMachine *arcade, SDL_Event *event){
+    //int quit=0;
     //while(quit!=1){
-        while(SDL_PollEvent(event)){
+        while(SDL_PollEvent(&event)){
             if(event->type==SDL_KEYDOWN){
                 switch(event->key.keysym.sym){
-                    case SDLK_c: arcade->in_port1 |= 0x1; break;//coin
+                    case SDLK_c: arcade->in_port1 |= 0x01; break;//coin
                     case SDLK_l: arcade->in_port1 |= 0x20; break;//left
                     case SDLK_r: arcade->in_port1 |= 0x40; break;//right
                     case SDLK_SPACE: arcade->in_port1 |= 0x10; break;//fire
                     case SDLK_RETURN: arcade->in_port1 |= 0x04; break;//start
+                    default: break;
                     //case SDLK_p: arcade->in_port1 |= 0x1; break;//pause
                 }
             }
-            else if(event->type==SDL_QUIT)quit=1;
+            if(event->type==SDL_KEYUP){
+                switch(event->key.keysym.sym){
+                    case SDLK_c: arcade->in_port1 &= ~0x01; break;//coin
+                    case SDLK_l: arcade->in_port1 &= ~0x20; break;//left
+                    case SDLK_r: arcade->in_port1 &= ~0x40; break;//right
+                    case SDLK_SPACE: arcade->in_port1 &= ~0x10; break;//fire
+                    case SDLK_RETURN: arcade->in_port1 &= ~0x04; break;//start
+                    default: break;
+                    //case SDLK_p: arcade->in_port1 |= 0x1; break;//pause
+                }
+            }
+            //else if(event->type==SDL_QUIT)quit=1;
         }
     //}
 }
 
 void keyUp(InvadersMachine *arcade, SDL_Event *event){
-    int quit=0;
+    //int quit=0;
     //while(quit!=1){
         while(SDL_PollEvent(event)){
-            if(event->type==SDL_KEYDOWN){
+            if(event->type==SDL_KEYUP){
                 switch(event->key.keysym.sym){
-                    case SDLK_c: arcade->in_port1 &= ~0x1; break;//coin
+                    case SDLK_c: arcade->in_port1 &= ~0x01; break;//coin
                     case SDLK_l: arcade->in_port1 &= ~0x20; break;//left
                     case SDLK_r: arcade->in_port1 &= ~0x40; break;//right
                     case SDLK_SPACE: arcade->in_port1 &= ~0x10; break;//fire
                     case SDLK_RETURN: arcade->in_port1 &= ~0x04; break;//start
+                    default: break;
                     //case SDLK_p: arcade->in_port1 |= 0x1; break;//pause
                 }
             }
-            else if(event->type==SDL_QUIT)quit=1;
+            //else if(event->type==SDL_QUIT)quit=1;
         }
     //}
-}
+}*/
 
 int main (int argc, char** argv) {//printf("begin");
     cpu8080 i8080; reset(&i8080);
@@ -125,10 +149,9 @@ int main (int argc, char** argv) {//printf("begin");
     load(&i8080, "invaders.f", 0x1000);
     load(&i8080, "invaders.e", 0x1800);
     InvadersMachine arcade; arcade.cpu=&i8080;
+    arcade.last_interrupt=0x08;
     arcade.vram=&i8080.memory[0x2400];
-    arcade.lastInterrupt=clock();
-    time_t time;
-    long t=1;
+    uint16_t last=0x10;
     //graphics s
     SDL_Window* window = NULL;
     window = SDL_CreateWindow
@@ -145,26 +168,43 @@ int main (int argc, char** argv) {//printf("begin");
     //graphics e
     //input s
     SDL_Event event;
-    //i8080.memory[0x20c0]=0;
+    arcade.in_port1=0x0;
+    unsigned long t=0;
     //input e
     for(;;){//if(i8080.cycles>=16660){draw(&arcade, renderer); i8080.cycles%=16660;}
-        emulate8080(&i8080);
-        uint8_t *opcode = &i8080.memory[i8080.pc];
-        switch(*opcode){
-            case 0xdb: {uint8_t port = opcode[1];
-                       i8080.a = MachineIN(&arcade, port);} break;
-            case 0xd3: {uint8_t port = opcode[1];
-                       MachineOUT(&arcade, port);} break;
-            default: break;
-        } //keyDown(&arcade, &event); keyUp(&arcade, &event); 
-        time=clock();
-        if(i8080.cycles>=16660){
-            draw(&arcade, renderer);
-            i8080.cycles%=16660;sleep(.7);
-            if(arcade.cpu->inte==1){
-                GenerateInterrupt(&i8080, t);
-                arcade.lastInterrupt = time;
+        t++; //if(t>43000){draw(&arcade, renderer);t=41000;}
+        while(SDL_PollEvent(&event)){
+            switch(event.type){
+                case SDL_KEYDOWN:{
+                    switch(event.key.keysym.sym){
+                        case SDLK_c: arcade.in_port1 |= 0x01; break;//coin
+                        case SDLK_LEFT: arcade.in_port1 |= 0x20; break;//left
+                        case SDLK_RIGHT: arcade.in_port1 |= 0x40; break;//right
+                        case SDLK_SPACE: arcade.in_port1 |= 0x10; break;//fire
+                        case SDLK_RETURN: arcade.in_port1 |= 0x04; break;//start
+                        default: break;
+                    //case SDLK_p: arcade->in_port1 |= 0x1; break;//pause
+                    }
+                } break;
+                case SDL_KEYUP:{
+                    switch(event.key.keysym.sym){
+                        case SDLK_c: arcade.in_port1 &= ~0x01; break;//coin
+                        case SDLK_LEFT: arcade.in_port1 &= ~0x20; break;//left
+                        case SDLK_RIGHT: arcade.in_port1 &= ~0x40; break;//right
+                        case SDLK_SPACE: arcade.in_port1 &= ~0x10; break;//fire
+                        case SDLK_RETURN: arcade.in_port1 &= ~0x04; break;//start
+                        default: break;
+                        //case SDLK_p: arcade->in_port1 |= 0x1; break;//pause
+                    }
+                } break;
             }
+        }
+        handleinput(&i8080, &arcade);
+        emulate8080(&i8080);
+        if(i8080.cc>=16667){
+            processInterrupts(last, &i8080);
+            last=last % 0x10+0x08;
+            draw(&arcade, renderer);
         }
     }
 }
