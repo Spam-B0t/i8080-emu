@@ -123,18 +123,18 @@ int main (int argc, char** argv) {
         224,
         256,
         SDL_WINDOW_SHOWN
-    );
+    ); //long t=0;//for speedup
     SDL_Renderer* renderer = NULL;
     renderer =  SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);//black bkgrnd
     //graphics e
-    for(;;){
+    for(;;){//t++; if(t>10000){t-=10000; draw(&arcade, renderer);}//for speedup
         handleinput(&i8080, &arcade);
         emulate8080(&i8080);
         if(i8080.cc>=16667){
             processInterrupts(last, &i8080);
             last=last % 0x10+0x08;
-            draw(&arcade, renderer);
+            draw(&arcade, renderer);//comment out for speedup
         }
     }
 }
