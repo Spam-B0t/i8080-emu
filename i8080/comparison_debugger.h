@@ -73,6 +73,12 @@ void handleinput(imme *im, cpu8080 *cpu, immil *im2, State8080 *state){
         }
 }
 
+long testmem(cpu8080 *cpu, State8080 *state){
+    long i;
+    for(i=0;i<=0x2400;i++)if(cpu->memory[i]!=state->memory[i])break;
+    return i;
+}
+
 int main() {//j 1500
     cpu8080 i8080;
     reset(&i8080);i8080.sp=0x00;
@@ -92,16 +98,16 @@ int main() {//j 1500
     imme im; immil im2; resetIM(&im, &im2);
     im.cpu=&i8080; im2.state=state;
     //machines end
-    int frag=0; long t=0; uint16_t last=0x10;
+    int frag=0; long t=0, bmem=0; uint16_t last=0x10;
     for(;;){
         handleinput(&im, &i8080, &im2, state);
         Emulate8080Op(state);
         printf("PC %04x\n", state->pc);
-        printf("mmil:%04x\n",((state->memory[0x23fb]<<8) | state->memory[0x23fa]));
+        //printf("mmil:%04x\n",((state->memory[0x23fb]<<8) | state->memory[0x23fa]));
         printf("------------------------\n");
         disassemble8080(i8080.memory, i8080.pc);
         emulate8080(&i8080);
-        printf("mme:%04x\n",((i8080.memory[0x23fb]<<8) | i8080.memory[0x23fa]));
+        //printf("mme:%04x\n",((i8080.memory[0x23fb]<<8) | i8080.memory[0x23fa]));
         printstats(&i8080);
         printf("------------------------\n");
         if(i8080.cc>=16667){
@@ -127,13 +133,14 @@ int main() {//j 1500
         if(im.shift0!=im2.shift0){printf("shift0 is bad\n"); frag=1;}
         if(im.shift1!=im2.shift1){printf("shift1 is bad\n"); frag=1;}
         if(im.shift_offset!=im2.shift_offset){printf("shift_offset is bad\n"); frag=1;}
+        bmem=testmem(&i8080, state);
+        if(bmem!=0x2401){
+            printf("CORRUPTED MEM: %04x\n", bmem);
+            printf("mmil:%02x\n",state->memory[bmem]);
+            printf("mme:%02x\n",i8080.memory[bmem]);
+            frag=1;
+        }
         t++;
-        if(((i8080.memory[0x23fb]<<8) | i8080.memory[0x23fa])!=
-        ((state->memory[0x23fb]<<8) | state->memory[0x23fa]))
-        {printf("CORRUPTED MEM\n");
-        printf("mmil:%04x\n",((state->memory[0x23fb]<<8) | state->memory[0x23fa]));
-        printf("mme:%04x\n",((i8080.memory[0x23fb]<<8) | i8080.memory[0x23fa]));
-        break;}
-        if(frag!=0 || t==200000)break;
+        if(frag!=0 || t==300000)break;
     }printf("\nt=%d", t);
 }
