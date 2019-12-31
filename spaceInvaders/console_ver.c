@@ -104,10 +104,10 @@ int main (int argc, char** argv) {//printf("begin");
     unsigned long t=0;
     //input e
     for(;;){t++;
-        if(t>=10000){
+       /* if(t>=10000){
         t-=10000;
             
-        }
+        }*/
         handleinput(&i8080, &arcade);
         emulate8080(&i8080);
         if(i8080.cc>=16667){
