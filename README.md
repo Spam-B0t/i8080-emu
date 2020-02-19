@@ -1,5 +1,5 @@
 # i8080 & Space Invaders emulator
-![alt text](https://github.com/Spam-B0t/emu/blob/master/spaceInvaders.gif)
+![alt text](https://github.com/SpamBot/emu/blob/master/spaceInvaders.gif)
 
 # i8080
 Mostly done, except DAA and ACops. May have bugs.
